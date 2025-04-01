@@ -6,7 +6,7 @@ from transformers import T5Tokenizer, T5ForConditionalGeneration
 import io
 
 # Load model T5 untuk typo correction
-device = torch.device("cpu")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model_path = "Wguy/t5_typo_correction_V3"
 tokenizer = T5Tokenizer.from_pretrained(model_path)
 model = T5ForConditionalGeneration.from_pretrained(model_path).to(device)
@@ -64,60 +64,69 @@ def match_province(row, df_ref):
     return "Tidak ditemukan"
 
 # Streamlit UI
-st.title("Model Typo Correction dan Pencocokan Provinsi")
+st.title("🔍 Typo Correction & Pencocokan Provinsi")
 
-# **Upload dataset referensi**
-st.subheader("Upload Dataset Referensi")
-file_ref = st.file_uploader("Upload Dataset Referensi (Excel)", type=["xls", "xlsx"])
+# Upload dataset referensi
+st.subheader("📂 Upload Dataset Referensi")
+file_ref = st.file_uploader("Upload file referensi (Excel)", type=["xls", "xlsx"])
 
 df_ref = None
 if file_ref:
-    df_ref = pd.read_excel(file_ref, sheet_name="Sheet1").applymap(clean_name)
-    st.success("✅ Dataset Referensi telah dimuat!")
-    st.write(df_ref.head())
+    try:
+        df_ref = pd.read_excel(file_ref, sheet_name="Sheet1").applymap(clean_name)
+        st.success("✅ Dataset Referensi telah dimuat!")
+        st.write(df_ref.head())  # Menampilkan 5 baris pertama
+    except Exception as e:
+        st.error(f"❌ Gagal membaca file referensi: {str(e)}")
 
-# **Upload dataset uji**
-st.subheader("Upload Dataset Uji")
-file_uji = st.file_uploader("Upload Dataset Uji (Excel)", type=["xls", "xlsx"])
+# Upload dataset uji
+st.subheader("📂 Upload Dataset Uji")
+file_uji = st.file_uploader("Upload file uji (Excel)", type=["xls", "xlsx"])
 
 df_uji = None
 if file_uji and df_ref is not None:
-    df_uji = pd.read_excel(file_uji, sheet_name="Sheet1").applymap(clean_name)
-    
-    # Pencocokan awal
-    df_uji["Provinsi Hasil"] = df_uji.apply(lambda row: match_province(row, df_ref), axis=1)
-    
-    # Typo correction untuk "Tidak ditemukan"
-    for index, row in df_uji.iterrows():
-        if row["Provinsi Hasil"] == "Tidak ditemukan":
-            for col in ["address_line_5", "address_line_4", "address_line_1", "address_line_2"]:
-                if col == "address_line_5" and row[col] == "Indonesia":
-                    continue
-                
-                corrected_text, confidence = correct_typo(row[col])
-                if confidence > 90 and corrected_text != row[col]:
-                    df_uji.at[index, col] = corrected_text
-                    matched_province = match_province(df_uji.loc[index], df_ref)
-                    if matched_province != "Tidak ditemukan":
-                        df_uji.at[index, "Provinsi Hasil"] = matched_province
-                        break
+    try:
+        df_uji = pd.read_excel(file_uji, sheet_name="Sheet1").applymap(clean_name)
+        st.success("✅ Dataset Uji telah dimuat!")
 
-    st.subheader("Hasil Pencocokan")
-    st.write(df_uji.head())
+        # Pencocokan awal
+        df_uji["Provinsi Hasil"] = df_uji.apply(lambda row: match_province(row, df_ref), axis=1)
 
-    # **Tombol untuk download hasil**
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df_uji.to_excel(writer, index=False)
-    processed_data = output.getvalue()
+        # Typo correction untuk "Tidak ditemukan"
+        for index, row in df_uji.iterrows():
+            if row["Provinsi Hasil"] == "Tidak ditemukan":
+                for col in ["address_line_5", "address_line_4", "address_line_1", "address_line_2"]:
+                    if col == "address_line_5" and row[col] == "Indonesia":
+                        continue
 
-    st.download_button(
-        label="Download Hasil Pencocokan",
-        data=processed_data,
-        file_name="Hasil_Pencocokan.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
+                    corrected_text, confidence = correct_typo(row[col])
+                    if confidence > 90 and corrected_text != row[col]:
+                        df_uji.at[index, col] = corrected_text
+                        matched_province = match_province(df_uji.loc[index], df_ref)
+                        if matched_province != "Tidak ditemukan":
+                            df_uji.at[index, "Provinsi Hasil"] = matched_province
+                            break  # Jika sudah cocok, hentikan
 
-# Jika dataset referensi belum diunggah, tampilkan peringatan
-if not file_ref:
+        # Menampilkan hasil
+        st.subheader("📊 Hasil Pencocokan")
+        st.write(df_uji.head())
+
+        # Tombol download hasil
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df_uji.to_excel(writer, index=False)
+        processed_data = output.getvalue()
+
+        st.download_button(
+            label="⬇️ Download Hasil Pencocokan",
+            data=processed_data,
+            file_name="Hasil_Pencocokan.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
+    except Exception as e:
+        st.error(f"❌ Gagal membaca file uji: {str(e)}")
+
+# Jika file referensi belum diunggah, beri peringatan
+if df_ref is None:
     st.warning("⚠️ Silakan upload dataset referensi terlebih dahulu sebelum mengunggah dataset uji!")
