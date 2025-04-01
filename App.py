@@ -1,15 +1,8 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-# In[ ]:
-
-
 import streamlit as st
 import pandas as pd
 import re
 import torch
 from transformers import T5Tokenizer, T5ForConditionalGeneration
-import torch.nn.functional as F
 import io
 
 # Load model T5 untuk typo correction
@@ -20,9 +13,9 @@ model = T5ForConditionalGeneration.from_pretrained(model_path).to(device)
 
 # Fungsi membersihkan nama
 def clean_name(name):
-    if pd.isna(name):  # Jika nilai NaN
+    if pd.isna(name):
         return ""
-    if isinstance(name, (int, float)):  # Jika nilai numerik
+    if isinstance(name, (int, float)):
         name = str(name)
     return re.sub(r'\d+', '', name).strip().title()
 
@@ -73,16 +66,22 @@ def match_province(row, df_ref):
 # Streamlit UI
 st.title("Model Typo Correction dan Pencocokan Provinsi")
 
-# Load dataset referensi (langsung dari file jika sudah pasti)
-df_ref = pd.read_excel("Dataset_Pencocokan.xlsx", sheet_name="Sheet1").applymap(clean_name)
-st.write("✅ Dataset Referensi telah dimuat.")
+# **Upload dataset referensi**
+st.subheader("Upload Dataset Referensi")
+file_ref = st.file_uploader("Upload Dataset Referensi (Excel)", type=["xls", "xlsx"])
 
-# Upload dataset uji
+df_ref = None
+if file_ref:
+    df_ref = pd.read_excel(file_ref, sheet_name="Sheet1").applymap(clean_name)
+    st.success("✅ Dataset Referensi telah dimuat!")
+    st.write(df_ref.head())
+
+# **Upload dataset uji**
 st.subheader("Upload Dataset Uji")
 file_uji = st.file_uploader("Upload Dataset Uji (Excel)", type=["xls", "xlsx"])
 
 df_uji = None
-if file_uji:
+if file_uji and df_ref is not None:
     df_uji = pd.read_excel(file_uji, sheet_name="Sheet1").applymap(clean_name)
     
     # Pencocokan awal
@@ -106,7 +105,7 @@ if file_uji:
     st.subheader("Hasil Pencocokan")
     st.write(df_uji.head())
 
-    # Tombol untuk download hasil
+    # **Tombol untuk download hasil**
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df_uji.to_excel(writer, index=False)
@@ -119,3 +118,6 @@ if file_uji:
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
+# Jika dataset referensi belum diunggah, tampilkan peringatan
+if not file_ref:
+    st.warning("⚠️ Silakan upload dataset referensi terlebih dahulu sebelum mengunggah dataset uji!")
