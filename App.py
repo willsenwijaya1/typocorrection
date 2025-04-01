@@ -14,7 +14,7 @@ import io
 
 # Load model T5 untuk typo correction
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model_path = "Wguy/t5_typo_correction_V3"  # Sesuaikan dengan model lokal atau Hugging Face
+model_path = "Wguy/t5_typo_correction_V3"
 tokenizer = T5Tokenizer.from_pretrained(model_path)
 model = T5ForConditionalGeneration.from_pretrained(model_path).to(device)
 
