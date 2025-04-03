@@ -115,14 +115,14 @@ if file_uji and df_ref is not None:
         # Tombol download hasil dengan 2 sheet
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df_pencocokan_awal.to_excel(writer, sheet_name="Hasil Awal", index=False)
+            df_pencocokan_awal.to_excel(writer, sheet_name="Hasil (Tanpa Typo Correction)", index=False)
             df_uji.to_excel(writer, sheet_name="Hasil Akhir", index=False)
         processed_data = output.getvalue()
 
         st.download_button(
-            label="⬇️ Download Hasil Pencocokan (2 Sheet)",
+            label="⬇️ Download Hasilnya",
             data=processed_data,
-            file_name="Hasil_Pencocokan.xlsx",
+            file_name="Result.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
