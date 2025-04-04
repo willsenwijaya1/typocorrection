@@ -89,8 +89,9 @@ if file_uji and df_ref is not None:
         df_uji = pd.read_excel(file_uji, sheet_name="Sheet1").applymap(clean_name)
         st.success("✅ Dataset Uji telah dimuat!")
 
-        # Pencocokan awal
+        # Simpan hasil pencocokan awal (sebelum typo correction)
         df_uji["Provinsi Hasil"] = df_uji.apply(lambda row: match_province(row, df_ref), axis=1)
+        df_pencocokan_awal = df_uji.copy()
 
         # Typo correction untuk "Tidak ditemukan"
         for index, row in df_uji.iterrows():
@@ -111,14 +112,15 @@ if file_uji and df_ref is not None:
         st.subheader("📊 Hasil Pencocokan")
         st.write(df_uji.head())
 
-        # Tombol download hasil
+        # Tombol download hasil dengan 2 sheet
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df_uji.to_excel(writer, index=False)
+            df_pencocokan_awal.to_excel(writer, sheet_name="Hasil Awal", index=False)
+            df_uji.to_excel(writer, sheet_name="Hasil Akhir", index=False)
         processed_data = output.getvalue()
 
         st.download_button(
-            label="⬇️ Download Hasil Pencocokan",
+            label="⬇️ Download Hasil Pencocokan (2 Sheet)",
             data=processed_data,
             file_name="Hasil_Pencocokan.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
