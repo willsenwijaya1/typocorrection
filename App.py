@@ -15,7 +15,7 @@ model = T5ForConditionalGeneration.from_pretrained(model_path).to(device)
 def clean_name(name):
     if pd.isna(name):
         return ""
-    if isinstance(name, (int, float)):
+    if isinstance(name, (int, float,pd.Timestamp)):
         name = str(name)
     return re.sub(r'\d+', '', name).strip().title()
 
