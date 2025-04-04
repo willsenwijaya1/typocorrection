@@ -15,7 +15,7 @@ model = T5ForConditionalGeneration.from_pretrained(model_path).to(device)
 def clean_name(name):
     if pd.isna(name):
         return ""
-    if isinstance(name, (int, float,pd.Timestamp)):
+    if isinstance(name, (int, float)):
         name = str(name)
     return re.sub(r'\d+', '', name).strip().title()
 
@@ -89,9 +89,8 @@ if file_uji and df_ref is not None:
         df_uji = pd.read_excel(file_uji, sheet_name="Sheet1").applymap(clean_name)
         st.success("✅ Dataset Uji telah dimuat!")
 
-        # Simpan hasil pencocokan awal (sebelum typo correction)
+        # Pencocokan awal
         df_uji["Provinsi Hasil"] = df_uji.apply(lambda row: match_province(row, df_ref), axis=1)
-        df_pencocokan_awal = df_uji.copy()
 
         # Typo correction untuk "Tidak ditemukan"
         for index, row in df_uji.iterrows():
@@ -112,15 +111,14 @@ if file_uji and df_ref is not None:
         st.subheader("📊 Hasil Pencocokan")
         st.write(df_uji.head())
 
-        # Tombol download hasil dengan 2 sheet
+        # Tombol download hasil
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df_pencocokan_awal.to_excel(writer, sheet_name="Hasil Awal", index=False)
-            df_uji.to_excel(writer, sheet_name="Hasil Akhir", index=False)
+            df_uji.to_excel(writer, index=False)
         processed_data = output.getvalue()
 
         st.download_button(
-            label="⬇️ Download Hasil Pencocokan (2 Sheet)",
+            label="⬇ Download Hasil Pencocokan",
             data=processed_data,
             file_name="Hasil_Pencocokan.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -131,4 +129,4 @@ if file_uji and df_ref is not None:
 
 # Jika file referensi belum diunggah, beri peringatan
 if df_ref is None:
-    st.warning("⚠️ Silakan upload dataset referensi terlebih dahulu sebelum mengunggah dataset uji!")
+    st.warning("⚠ Silakan upload dataset referensi terlebih dahulu sebelum mengunggah dataset uji!")
