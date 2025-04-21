@@ -74,12 +74,9 @@ def match_province(row, df_ref, negara_luar):
 # Streamlit UI
 st.title("🔍 Typo Correction & Pencocokan Provinsi")
 
-# Upload dataset referensi
-st.subheader("📂 Upload Dataset Referensi")
-file_ref = st.file_uploader("Upload file referensi (Excel)", type=["xls", "xlsx"])
-
-# Upload negara luar
-file_negara = st.file_uploader("Upload daftar negara (Sheet2)", type=["xls", "xlsx"])
+# Upload dataset referensi (berisi Sheet1 dan Sheet2)
+st.subheader("📂 Upload Dataset Referensi & Negara")
+file_ref = st.file_uploader("Upload file referensi (Excel dengan Sheet1 dan Sheet2)", type=["xls", "xlsx"])
 
 # Upload dataset uji
 st.subheader("📂 Upload Dataset Uji")
@@ -89,10 +86,10 @@ df_ref = None
 negara_luar = []
 df_uji = None
 
-if file_ref and file_negara:
+if file_ref:
     try:
         df_ref = pd.read_excel(file_ref, sheet_name="Sheet1").applymap(clean_name)
-        negara_df = pd.read_excel(file_negara, sheet_name="Sheet2")
+        negara_df = pd.read_excel(file_ref, sheet_name="Sheet2")
         negara_df = negara_df.iloc[:, [0, 1]].dropna(how="all").applymap(clean_name)
         negara_luar = pd.concat([negara_df.iloc[:, 0], negara_df.iloc[:, 1]]).dropna().unique().tolist()
         st.success("✅ Dataset Referensi & Negara telah dimuat!")
@@ -144,4 +141,4 @@ if file_uji and df_ref is not None:
         st.error(f"❌ Gagal membaca file uji: {str(e)}")
 
 if df_ref is None:
-    st.warning("⚠ Silakan upload dataset referensi dan daftar negara terlebih dahulu sebelum mengunggah dataset uji!")
+    st.warning("⚠ Silakan upload file referensi (dengan Sheet1 dan Sheet2) terlebih dahulu!")
