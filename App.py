@@ -3,26 +3,36 @@ import pandas as pd
 import re
 import torch
 from transformers import T5Tokenizer, T5ForConditionalGeneration
-import os
+import io
 
-# Load model
-@st.cache_resource
-def load_model():
-    model_path = "Wguy/t5_typo_correction_V3"  # from Hugging Face
-    tokenizer = T5Tokenizer.from_pretrained(model_path)
-    model = T5ForConditionalGeneration.from_pretrained(model_path).to(device)
-    return tokenizer, model
+# Load model T5 untuk typo correction
+device = torch.device("cpu")
+model_path = "Wguy/t5_typo_correction_V3"
+tokenizer = T5Tokenizer.from_pretrained(model_path)
+model = T5ForConditionalGeneration.from_pretrained(model_path).to(device)
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-tokenizer, model = load_model()
-
-# Utility functions
+# Fungsi membersihkan nama
 def clean_name(name):
-    if pd.isna(name): return ""
-    if isinstance(name, (int, float, pd.Timestamp)) or not isinstance(name, str):
+    if pd.isna(name):
+        return ""
+    if isinstance(name, (int, float, pd.Timestamp)):
+        name = str(name)
+    elif not isinstance(name, str):
         name = str(name)
     return re.sub(r'\d+', '', name).strip().title()
 
+# Fungsi hapus prefix seperti kab/kota
+def remove_prefix_kota_kab(value):
+    if not isinstance(value, str):
+        return value
+    if value.lower().startswith("kota "):
+        value = value[5:]
+    pattern = r"\b(Kab\.?|Kabupaten|Rt|Rw|Adm\.?|Ds|Kec\.?|Kel\.?|Kp\.?)\b"
+    value = re.sub(pattern, "", value, flags=re.IGNORECASE).strip()
+    value = re.sub(r"\s{2,}", " ", value)
+    return value
+
+# Fungsi typo correction
 def correct_typo(text):
     if not text or text.strip() == "":
         return text.lower(), 100
@@ -39,14 +49,7 @@ def correct_typo(text):
         avg_confidence = 100
     return corrected_text, avg_confidence
 
-def remove_prefix_kota_kab(value):
-    if not isinstance(value, str): return value
-    if value.lower().startswith("kota "): value = value[5:]
-    pattern = r"\b(Kab\.?|Kabupaten|Rt|Rw|Adm\.?|Ds|Kec\.?|Kel\.?|Kp\.?)\b"
-    value = re.sub(pattern, "", value, flags=re.IGNORECASE).strip()
-    value = re.sub(r"\s{2,}", " ", value)
-    return value
-
+# Fungsi pencocokan provinsi
 def match_province(row, df_ref, negara_luar):
     check_columns = ["address_line_5", "address_line_4", "address_line_1", "address_line_2"]
     for col in check_columns:
@@ -54,42 +57,59 @@ def match_province(row, df_ref, negara_luar):
             return "a.n."
     for col in check_columns:
         value = row[col]
-        if value == "": continue
+        if value == "":
+            continue
         value = remove_prefix_kota_kab(value)
-        if not df_ref[df_ref["Provinsi"].str.contains(fr'\b{re.escape(value)}\b', na=False, regex=True)].empty:
-            return df_ref[df_ref["Provinsi"].str.contains(fr'\b{re.escape(value)}\b', na=False, regex=True)].iloc[0]["Provinsi"]
-        if not df_ref[df_ref["kota/kab"].str.contains(fr'\b{re.escape(value)}\b', na=False, regex=True)].empty:
-            return df_ref[df_ref["kota/kab"].str.contains(fr'\b{re.escape(value)}\b', na=False, regex=True)].iloc[0]["Provinsi"]
-        if not df_ref[df_ref["Kecamatan"].str.contains(fr'\b{re.escape(value)}\b', na=False, regex=True)].empty:
-            return df_ref[df_ref["Kecamatan"].str.contains(fr'\b{re.escape(value)}\b', na=False, regex=True)].iloc[0]["Provinsi"]
+        matched_prov = df_ref[df_ref["Provinsi"].str.contains(fr'\b{re.escape(value)}\b', na=False, regex=True)]
+        if not matched_prov.empty:
+            return matched_prov.iloc[0]["Provinsi"]
+        matched_city = df_ref[df_ref["kota/kab"].str.contains(fr'\b{re.escape(value)}\b', na=False, regex=True)]
+        if not matched_city.empty:
+            return matched_city.iloc[0]["Provinsi"]
+        matched_kecamatan = df_ref[df_ref["Kecamatan"].str.contains(fr'\b{re.escape(value)}\b', na=False, regex=True)]
+        if not matched_kecamatan.empty:
+            return matched_kecamatan.iloc[0]["Provinsi"]
     return "Tidak ditemukan"
 
-# Load reference data
-@st.cache_data
-def load_reference():
-    df_ref = pd.read_excel("Dataset Pencocokan.xlsx", sheet_name="Sheet1").applymap(clean_name)
-    negara_luar = pd.read_excel("Dataset Pencocokan.xlsx", sheet_name="Sheet2")
-    negara_luar = negara_luar.iloc[:, [0, 1]].dropna(how="all").applymap(clean_name)
-    negara_luar = pd.concat([negara_luar.iloc[:, 0], negara_luar.iloc[:, 1]]).dropna().unique().tolist()
-    return df_ref, negara_luar
+# Streamlit UI
+st.title("🔍 Typo Correction & Pencocokan Provinsi")
 
-df_ref, negara_luar = load_reference()
+# Upload dataset referensi
+st.subheader("📂 Upload Dataset Referensi")
+file_ref = st.file_uploader("Upload file referensi (Excel)", type=["xls", "xlsx"])
 
-# Streamlit App
-st.title("Typo Correction & Provinsi Matching")
+# Upload negara luar
+file_negara = st.file_uploader("Upload daftar negara (Sheet2)", type=["xls", "xlsx"])
 
-uploaded_file = st.file_uploader("Upload Excel File (.xlsx)", type=["xlsx"])
+# Upload dataset uji
+st.subheader("📂 Upload Dataset Uji")
+file_uji = st.file_uploader("Upload file uji (Excel)", type=["xls", "xlsx"])
 
-if uploaded_file:
-    df_uji = pd.read_excel(uploaded_file, sheet_name="Sheet1").applymap(clean_name)
-    df_uji[["address_line_5", "address_line_4", "address_line_1", "address_line_2"]] = df_uji[
-        ["address_line_5", "address_line_4", "address_line_1", "address_line_2"]
-    ].applymap(remove_prefix_kota_kab)
-    
-    df_uji["Provinsi Hasil"] = df_uji.apply(lambda row: match_province(row, df_ref, negara_luar), axis=1)
-    df_before = df_uji.copy()
+df_ref = None
+negara_luar = []
+df_uji = None
 
-    with st.spinner("Memproses typo dan mencocokkan data..."):
+if file_ref and file_negara:
+    try:
+        df_ref = pd.read_excel(file_ref, sheet_name="Sheet1").applymap(clean_name)
+        negara_df = pd.read_excel(file_negara, sheet_name="Sheet2")
+        negara_df = negara_df.iloc[:, [0, 1]].dropna(how="all").applymap(clean_name)
+        negara_luar = pd.concat([negara_df.iloc[:, 0], negara_df.iloc[:, 1]]).dropna().unique().tolist()
+        st.success("✅ Dataset Referensi & Negara telah dimuat!")
+        st.write(df_ref.head())
+    except Exception as e:
+        st.error(f"❌ Gagal membaca file: {str(e)}")
+
+if file_uji and df_ref is not None:
+    try:
+        df_uji = pd.read_excel(file_uji, sheet_name="Sheet1").applymap(clean_name)
+        for col in ["address_line_5", "address_line_4", "address_line_1", "address_line_2"]:
+            df_uji[col] = df_uji[col].apply(remove_prefix_kota_kab)
+
+        df_uji["Provinsi Hasil"] = df_uji.apply(lambda row: match_province(row, df_ref, negara_luar), axis=1)
+
+        df_before_correction = df_uji.copy()
+
         for index, row in df_uji.iterrows():
             if row["Provinsi Hasil"] == "Tidak ditemukan":
                 for col in ["address_line_5", "address_line_4", "address_line_1", "address_line_2"]:
@@ -104,23 +124,24 @@ if uploaded_file:
                             df_uji.at[index, "Provinsi Hasil"] = matched_province
                             break
 
-    st.success("Selesai! Data berhasil diproses.")
+        st.subheader("📊 Hasil Pencocokan")
+        st.write(df_uji.head())
 
-    # Show and download
-    st.subheader("Preview Data Setelah Koreksi")
-    st.dataframe(df_uji.head())
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df_before_correction.to_excel(writer, sheet_name="Sebelum Typo", index=False)
+            df_uji.to_excel(writer, sheet_name="Setelah Typo", index=False)
+        processed_data = output.getvalue()
 
-    # Save to Excel
-    from io import BytesIO
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        df_before.to_excel(writer, sheet_name="Sebelum Typo", index=False)
-        df_uji.to_excel(writer, sheet_name="Setelah Typo", index=False)
-    output.seek(0)
+        st.download_button(
+            label="⬇ Download Hasil Pencocokan",
+            data=processed_data,
+            file_name="Hasil_Pencocokan_DuaSheet.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
 
-    st.download_button(
-        label="📥 Download Hasil Excel",
-        data=output,
-        file_name="hasil_pencocokan_duasheet.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
+    except Exception as e:
+        st.error(f"❌ Gagal membaca file uji: {str(e)}")
+
+if df_ref is None:
+    st.warning("⚠ Silakan upload dataset referensi dan daftar negara terlebih dahulu sebelum mengunggah dataset uji!")
