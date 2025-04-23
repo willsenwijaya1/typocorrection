@@ -5,25 +5,11 @@ import torch
 from transformers import T5Tokenizer, T5ForConditionalGeneration
 import io
 
-# Load model T5 untuk typo correction dengan caching dan error handling
+# Load model T5 untuk typo correction
 device = torch.device("cpu")
 model_path = "Wguy/t5_typo_correction_V3"
-
-@st.cache_resource
-def load_model():
-    try:
-        tokenizer = T5Tokenizer.from_pretrained(model_path)
-        model = T5ForConditionalGeneration.from_pretrained(
-        model_path,
-        torch_dtype=torch.float32,
-        low_cpu_mem_usage=False  
-    )
-        return tokenizer, model
-    except Exception as e:
-        st.error(f"❌ Gagal memuat model T5: {str(e)}")
-        st.stop()
-
-tokenizer, model = load_model()
+tokenizer = T5Tokenizer.from_pretrained(model_path)
+model = T5ForConditionalGeneration.from_pretrained(model_path).to(device)
 
 # Fungsi membersihkan nama
 def clean_name(name):
@@ -51,7 +37,7 @@ def correct_typo(text):
     if not text or text.strip() == "":
         return text.lower(), 100
     input_text = f"correct: {text}"
-    input_ids = tokenizer(input_text, return_tensors="pt").input_ids.to("cpu")
+    input_ids = tokenizer(input_text, return_tensors="pt").input_ids.to(device)
     with torch.no_grad():
         output = model.generate(input_ids, return_dict_in_generate=True, output_scores=True)
     corrected_text = tokenizer.decode(output.sequences[0], skip_special_tokens=True).title()
@@ -102,8 +88,8 @@ df_uji = None
 
 if file_ref:
     try:
-        df_ref = pd.read_excel(file_ref, sheet_name="Sheet1", engine='openpyxl').applymap(clean_name)
-        negara_df = pd.read_excel(file_ref, sheet_name="Sheet2", engine='openpyxl')
+        df_ref = pd.read_excel(file_ref, sheet_name="Sheet1").applymap(clean_name)
+        negara_df = pd.read_excel(file_ref, sheet_name="Sheet2")
         negara_df = negara_df.iloc[:, [0, 1]].dropna(how="all").applymap(clean_name)
         negara_luar = pd.concat([negara_df.iloc[:, 0], negara_df.iloc[:, 1]]).dropna().unique().tolist()
         st.success("✅ Dataset Referensi & Negara telah dimuat!")
@@ -113,7 +99,7 @@ if file_ref:
 
 if file_uji and df_ref is not None:
     try:
-        df_uji = pd.read_excel(file_uji, sheet_name="Sheet1", engine='openpyxl').applymap(clean_name)
+        df_uji = pd.read_excel(file_uji, sheet_name="Sheet1").applymap(clean_name)
         for col in ["address_line_5", "address_line_4", "address_line_1", "address_line_2"]:
             df_uji[col] = df_uji[col].apply(remove_prefix_kota_kab)
 
