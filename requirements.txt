@@ -1,6 +1,6 @@
-streamlit
+streamlit==1.30.0
 pandas
-torch
-transformers
+torch==2.0.1
+transformers==4.36.2
 openpyxl
 sentencepiece
