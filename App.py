@@ -13,7 +13,7 @@ model_path = "Wguy/t5_typo_correction_V3"
 def load_model():
     try:
         tokenizer = T5Tokenizer.from_pretrained(model_path)
-        model = T5ForConditionalGeneration.from_pretrained(model_path).to(device)
+        model = T5ForConditionalGeneration.from_pretrained(model_path)
         return tokenizer, model
     except Exception as e:
         st.error(f"❌ Gagal memuat model T5: {str(e)}")
