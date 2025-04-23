@@ -14,9 +14,10 @@ def load_model():
     try:
         tokenizer = T5Tokenizer.from_pretrained(model_path)
         model = T5ForConditionalGeneration.from_pretrained(
-            model_path,
-            torch_dtype=torch.float32   
-        )
+        model_path,
+        torch_dtype=torch.float32,
+        low_cpu_mem_usage=False  
+    )
         return tokenizer, model
     except Exception as e:
         st.error(f"❌ Gagal memuat model T5: {str(e)}")
