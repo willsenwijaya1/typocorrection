@@ -50,7 +50,7 @@ def correct_typo(text):
     if not text or text.strip() == "":
         return text.lower(), 100
     input_text = f"correct: {text}"
-    input_ids = tokenizer(input_text, return_tensors="pt").input_ids.to(device)
+    input_ids = tokenizer(input_text, return_tensors="pt").input_ids.to("cpu")
     with torch.no_grad():
         output = model.generate(input_ids, return_dict_in_generate=True, output_scores=True)
     corrected_text = tokenizer.decode(output.sequences[0], skip_special_tokens=True).title()
