@@ -15,7 +15,7 @@ def load_model():
         tokenizer = T5Tokenizer.from_pretrained(model_path)
         model = T5ForConditionalGeneration.from_pretrained(
             model_path,
-            torch_dtype=torch.float32   # Force load ke CPU dengan tipe data standar
+            torch_dtype=torch.float32   
         )
         return tokenizer, model
     except Exception as e:
